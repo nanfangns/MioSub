@@ -5,6 +5,14 @@ description: "All notable changes to MioSub"
 
 All notable changes to this project will be documented in this file.
 
+## [3.1.4] - 2026-05-06
+
+### Fixes
+
+- **Error Handling**: Fix TypeError crash when third-party API relays return numeric error codes — `isTransientError()` now handles non-string `.code` values correctly (Fixes MIOSUB-54).
+- **Vocal Separation**: Include full stderr output in error messages for crash diagnostics, replacing the previous "key line extraction" that often captured irrelevant GPU enumeration logs instead of actual errors.
+- **Electron**: Silence binary version-probe noise in Sentry — yt-dlp, Whisper, CTC Aligner, and BSRoformer startup version checks now cache results, use longer timeouts, and suppress handled timeout errors from reporting (Fixes MIOSUB-D, MIOSUB-37, MIOSUB-49, MIOSUB-4K).
+
 ## [3.1.3] - 2026-04-24
 
 ### Features
