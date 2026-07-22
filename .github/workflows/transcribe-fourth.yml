@@ -25,8 +25,6 @@ jobs:
         run: base64 -d fourth_audio.b64 > fourth_audio.ogg
       - name: Verify original audio bytes
         run: echo '92a3847f3de2c5ed77e839bac3a08d6da5ab44c94761f7a15b5c82aa6cdb0396  fourth_audio.ogg' | sha256sum -c -
-      - name: Probe original audio
-        run: ffprobe -v error -show_entries format=duration,bit_rate -of default=nw=1 fourth_audio.ogg
       - name: Install Whisper
         run: |
           python -m pip install --upgrade pip
