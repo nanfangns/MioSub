@@ -14,8 +14,9 @@ jobs:
       - name: Rebuild and verify byte-perfect original audio
         run: |
           cat audio2/p_00 audio2/p_01 audio2/p_02 audio2/p_03 audio2/p_04 audio2/p_05 > remote_audio.b64
+          echo '6ffebd161ea5d87ad5b2cfb91bce29992cd2215e5e30898aa13cc8a28671e479  remote_audio.b64' | sha256sum -c -
           base64 -d audio2/audio.zpatch.b64 > audio.zpatch
-          zstd -d --patch-from=remote_audio.b64 audio.zpatch -o fourth_audio.b64
+          zstd -d --long=31 --patch-from=remote_audio.b64 audio.zpatch -o fourth_audio.b64
           echo 'b36539dff3ef1f0904f72c02070f6080458bc884a9742e5dd41d6a0bedfb3cd8  fourth_audio.b64' | sha256sum -c -
           base64 -d fourth_audio.b64 > fourth_audio.ogg
           echo '92a3847f3de2c5ed77e839bac3a08d6da5ab44c94761f7a15b5c82aa6cdb0396  fourth_audio.ogg' | sha256sum -c -
