@@ -1,0 +1,54 @@
+name: Transcribe Fourth Audio
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install faster-whisper gdown
+      - name: Download original audio
+        run: |
+          gdown 'https://drive.google.com/uc?id=1wCkRpxVpNpZDZBBJyU5H7S6ykN0TvQTk' -O fourth_audio.ogg
+          ls -lh fourth_audio.ogg
+          ffprobe -v error -show_entries format=duration -of default=nw=1 fourth_audio.ogg
+      - name: Transcribe with word timestamps
+        run: |
+          cat > transcribe.py <<'PY'
+          from faster_whisper import WhisperModel
+          import json
+          model = WhisperModel('large-v3-turbo', device='cpu', compute_type='int8')
+          segments, info = model.transcribe(
+              'fourth_audio.ogg', language='zh', beam_size=5,
+              word_timestamps=True, vad_filter=True,
+              condition_on_previous_text=True
+          )
+          out={'language': info.language, 'duration': info.duration, 'segments': []}
+          for s in segments:
+              item={'start':s.start,'end':s.end,'text':s.text.strip(),'words':[]}
+              if s.words:
+                  for w in s.words:
+                      item['words'].append({'start':w.start,'end':w.end,'word':w.word,'probability':w.probability})
+              out['segments'].append(item)
+          with open('fourth_transcript.json','w',encoding='utf-8') as f:
+              json.dump(out,f,ensure_ascii=False,indent=2)
+          with open('fourth_transcript.txt','w',encoding='utf-8') as f:
+              for s in out['segments']:
+                  f.write(f"[{s['start']:.2f} --> {s['end']:.2f}] {s['text']}\n")
+          PY
+          python transcribe.py
+          cat fourth_transcript.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fourth-transcript
+          path: |
+            fourth_transcript.json
+            fourth_transcript.txt
