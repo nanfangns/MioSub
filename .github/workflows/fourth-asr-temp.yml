@@ -16,22 +16,18 @@ jobs:
         with: {python-version: '3.11'}
       - name: Reconstruct and verify original audio
         run: |
-          set +e
+          git fetch origin tmp/asr-fourth-final-20260722:refs/remotes/origin/tmp/asr-fourth-final-20260722
+          for i in 00 01 02 03 04 05 06 07; do
+            git show origin/tmp/asr-fourth-final-20260722:asr_audio/part${i}.txt
+          done | tr -d '\r\n' > fourth_micro.b64
           {
-            git fetch origin tmp/asr-fourth-final-20260722:refs/remotes/origin/tmp/asr-fourth-final-20260722
-            for i in 00 01 02 03 04 05 06 07; do
-              echo "part${i}: $(git show origin/tmp/asr-fourth-final-20260722:asr_audio/part${i}.txt | wc -c) bytes"
-              git show origin/tmp/asr-fourth-final-20260722:asr_audio/part${i}.txt
-            done > fourth_micro.b64
             echo "combined: $(wc -c < fourth_micro.b64) bytes"
             sha256sum fourth_micro.b64
             base64 -d fourth_micro.b64 > fourth_micro.ogg
             echo "decoded: $(wc -c < fourth_micro.ogg) bytes"
             sha256sum fourth_micro.ogg
             file fourth_micro.ogg
-            ffprobe -v error -show_entries format=duration -of default=nw=1 fourth_micro.ogg
-          } > reconstruct.log 2>&1
-          cat reconstruct.log
+          } | tee reconstruct.log
           test $(wc -c < fourth_micro.b64) -eq 51780
           echo '174a52464bf2ebec7845a68127258e715c50b8f0726adc2d8913956bf24a922b  fourth_micro.b64' | sha256sum -c -
           echo 'cf121638a9bbbc0eb74566af3d5e8a8a181f7a6de5622cbdc2620af9f8584c9a  fourth_micro.ogg' | sha256sum -c -
