@@ -1,92 +1,22 @@
-name: Transcribe Real Fourth Audio Chunks
+name: Fetch Vosk Chinese Model
 on:
   pull_request:
     branches: [main]
   workflow_dispatch:
 jobs:
-  transcribe:
+  fetch-model:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Rebuild verified real audio
+      - name: Download Vosk runtime and Chinese model
         run: |
-          cat audio2/p_00 audio2/p_01 audio2/p_02 audio2/p_03 audio2/p_04 audio2/p_05 > remote_audio.b64
-          echo '6ffebd161ea5d87ad5b2cfb91bce29992cd2215e5e30898aa13cc8a28671e479  remote_audio.b64' | sha256sum -c -
-          base64 -d audio2/audio.zpatch.b64 > audio.zpatch
-          zstd -d --long=31 --patch-from=remote_audio.b64 audio.zpatch -o baseline_audio.b64
-          echo 'b36539dff3ef1f0904f72c02070f6080458bc884a9742e5dd41d6a0bedfb3cd8  baseline_audio.b64' | sha256sum -c -
-          cat real_patch/p_00 real_patch/p_01 real_patch/p_02 real_patch/p_03 real_patch/p_04 > real_audio.zpatch.b64
-          echo 'c7546962d5c3b1f3edf6ff9779edaa217c54da67964712e86fabb2d7cd66df20  real_audio.zpatch.b64' | sha256sum -c -
-          base64 -d real_audio.zpatch.b64 > real_audio.zpatch
-          zstd -d --long=31 --patch-from=baseline_audio.b64 real_audio.zpatch -o fourth_real_audio.b64
-          echo '174a52464bf2ebec7845a68127258e715c50b8f0726adc2d8913956bf24a922b  fourth_real_audio.b64' | sha256sum -c -
-          base64 -d fourth_real_audio.b64 > fourth_real_audio.ogg
-          echo 'cf121638a9bbbc0eb74566af3d5e8a8a181f7a6de5622cbdc2620af9f8584c9a  fourth_real_audio.ogg' | sha256sum -c -
-      - name: Install Whisper
-        run: |
-          python -m pip install --upgrade pip
-          pip install faster-whisper numpy
-      - name: Decode and transcribe in short chunks
-        run: |
-          cat > transcribe_chunks.py <<'PY'
-          import av, json, wave, os
-          import numpy as np
-          from faster_whisper import WhisperModel
-
-          src='fourth_real_audio.ogg'
-          container=av.open(src)
-          stream=container.streams.audio[0]
-          resampler=av.audio.resampler.AudioResampler(format='s16', layout='mono', rate=16000)
-          arrays=[]
-          for frame in container.decode(stream):
-              out=resampler.resample(frame)
-              if not isinstance(out, list): out=[out]
-              for f in out:
-                  arrays.append(f.to_ndarray().reshape(-1))
-          audio=np.concatenate(arrays).astype(np.int16)
-          sr=16000
-          duration=len(audio)/sr
-          chunk_len=8.0
-          overlap=0.4
-          os.makedirs('chunks',exist_ok=True)
-          model=WhisperModel('large-v3-turbo',device='cpu',compute_type='int8')
-          prompt='智慧体育体测分析与训练指导智能体，体测数据，体育中考政策与评分标准，家长平时运动记录，教师分层，优势保持组，达标提升组，重点帮扶组，分组训练，训练方案，家校协同，项目组合，BMI分布图，项目平均分雷达图，Word报告导出。'
-          all_segments=[]
-          idx=0
-          start=0.0
-          while start < duration:
-              end=min(duration,start+chunk_len)
-              a=int(start*sr); b=int(end*sr)
-              path=f'chunks/chunk_{idx:02d}.wav'
-              with wave.open(path,'wb') as wf:
-                  wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(sr); wf.writeframes(audio[a:b].tobytes())
-              segs,info=model.transcribe(path,language='zh',beam_size=5,word_timestamps=True,vad_filter=False,condition_on_previous_text=False,temperature=0.0,initial_prompt=prompt)
-              for s in segs:
-                  words=[]
-                  if s.words:
-                      for w in s.words:
-                          gs=start+w.start; ge=start+w.end
-                          if idx>0 and ge <= start+overlap/2: continue
-                          words.append({'start':gs,'end':ge,'word':w.word,'probability':w.probability})
-                  text=''.join(w['word'] for w in words).strip() if words else s.text.strip()
-                  if text:
-                      all_segments.append({'chunk':idx,'start':start+s.start,'end':start+s.end,'text':text,'avg_logprob':s.avg_logprob,'no_speech_prob':s.no_speech_prob,'words':words})
-              idx+=1
-              start += chunk_len-overlap
-          out={'duration':duration,'segments':all_segments}
-          with open('fourth_chunked_transcript.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,indent=2)
-          with open('fourth_chunked_transcript.txt','w',encoding='utf-8') as f:
-              for s in all_segments: f.write(f"[{s['start']:.2f} --> {s['end']:.2f}] {s['text']}\n")
-          PY
-          python transcribe_chunks.py
-          cat fourth_chunked_transcript.txt
+          mkdir -p vosk_bundle
+          curl -L --fail --retry 3 -o vosk_bundle/vosk-0.3.45.whl 'https://files.pythonhosted.org/packages/fc/ca/83398cfcd557360a3d7b2d732aee1c5f6999f68618d1645f38d53e14c9ff/vosk-0.3.45-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl'
+          curl -L --fail --retry 3 -o vosk_bundle/vosk-model-small-cn-0.22.zip 'https://huggingface.co/rhasspy/vosk-models/resolve/main/zh/vosk-model-small-cn-0.22.zip?download=true'
+          echo '25e025093c4399d7278f543568ed8cc5460ac3a4bf48c23673ace1e25d26619f  vosk_bundle/vosk-0.3.45.whl' | sha256sum -c -
+          echo '3af8b0e7e0f835ae9d414ce5df580237a3cfb08d586c9fbbb0f7ff29ad5b14ba  vosk_bundle/vosk-model-small-cn-0.22.zip' | sha256sum -c -
+          ls -lh vosk_bundle
       - uses: actions/upload-artifact@v4
         with:
-          name: fourth-chunked-transcript
-          path: |
-            fourth_chunked_transcript.json
-            fourth_chunked_transcript.txt
-            fourth_real_audio.ogg
+          name: vosk-cn-bundle
+          path: vosk_bundle/
