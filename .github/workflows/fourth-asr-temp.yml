@@ -2,22 +2,26 @@ name: fourth-asr-temp
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 permissions:
-  contents: write
+  contents: read
 jobs:
   asr:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
-      - run: |
+      - name: Download original audio and install Whisper
+        run: |
           curl -L --fail --retry 3 'https://drive.usercontent.google.com/download?id=1wCkRpxVpNpZDZBBJyU5H7S6ykN0TvQTk&export=download&confirm=t' -o fourth_micro.ogg
           test $(stat -c%s fourth_micro.ogg) -gt 10000
+          file fourth_micro.ogg
           pip install faster-whisper
-      - run: |
+      - name: Transcribe with word timestamps
+        run: |
           cat > /tmp/asr.py <<'PY'
           from pathlib import Path
           import json
@@ -30,9 +34,9 @@ jobs:
           Path('fourth-transcript.txt').write_text('\n'.join(f"[{s['start']:.3f} --> {s['end']:.3f}] {s['text']}" for s in out),encoding='utf-8')
           PY
           python /tmp/asr.py
-      - run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add fourth-transcript.json fourth-transcript.txt
-          git commit -m 'Add fourth original-audio transcript'
-          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fourth-transcript
+          path: |
+            fourth-transcript.json
+            fourth-transcript.txt
