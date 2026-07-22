@@ -17,8 +17,9 @@ jobs:
       - name: Download original audio and install Whisper
         run: |
           curl -L --fail --retry 3 'https://drive.usercontent.google.com/download?id=1wCkRpxVpNpZDZBBJyU5H7S6ykN0TvQTk&export=download&confirm=t' -o fourth_micro.ogg
-          test $(stat -c%s fourth_micro.ogg) -gt 10000
-          file fourth_micro.ogg
+          ls -lh fourth_micro.ogg
+          file fourth_micro.ogg | tee audio-file.txt
+          ffprobe -v error -show_entries format=duration -of default=nw=1 fourth_micro.ogg | tee audio-probe.txt
           pip install faster-whisper
       - name: Transcribe with word timestamps
         run: |
@@ -26,17 +27,26 @@ jobs:
           from pathlib import Path
           import json
           from faster_whisper import WhisperModel
-          m=WhisperModel('small',device='cpu',compute_type='int8')
+          m=WhisperModel('base',device='cpu',compute_type='int8')
           segs,info=m.transcribe('fourth_micro.ogg',language='zh',beam_size=5,vad_filter=True,word_timestamps=True,initial_prompt='智慧体育体测分析与训练指导智能体，体测，BMI，坐位体前屈，Word，DOCX，知识库，训练建议，体育中考')
           out=[]
           for s in segs: out.append({'start':round(s.start,3),'end':round(s.end,3),'text':s.text.strip(),'words':[{'start':round(w.start,3) if w.start is not None else None,'end':round(w.end,3) if w.end is not None else None,'word':w.word} for w in (s.words or [])]})
           Path('fourth-transcript.json').write_text(json.dumps({'language':info.language,'duration':info.duration,'segments':out},ensure_ascii=False,indent=2),encoding='utf-8')
           Path('fourth-transcript.txt').write_text('\n'.join(f"[{s['start']:.3f} --> {s['end']:.3f}] {s['text']}" for s in out),encoding='utf-8')
           PY
-          python /tmp/asr.py
+          set +e
+          python /tmp/asr.py > asr.log 2>&1
+          code=$?
+          cat asr.log
+          exit $code
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: fourth-transcript
+          name: fourth-transcript-debug
+          if-no-files-found: warn
           path: |
             fourth-transcript.json
             fourth-transcript.txt
+            asr.log
+            audio-file.txt
+            audio-probe.txt
