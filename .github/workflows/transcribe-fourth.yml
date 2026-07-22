@@ -1,4 +1,4 @@
-name: Transcribe Fourth Audio
+name: Transcribe Real Fourth Audio
 on:
   pull_request:
     branches: [main]
@@ -11,29 +11,38 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Rebuild verified original audio
+      - name: Rebuild baseline audio
         run: |
           cat audio2/p_00 audio2/p_01 audio2/p_02 audio2/p_03 audio2/p_04 audio2/p_05 > remote_audio.b64
           echo '6ffebd161ea5d87ad5b2cfb91bce29992cd2215e5e30898aa13cc8a28671e479  remote_audio.b64' | sha256sum -c -
           base64 -d audio2/audio.zpatch.b64 > audio.zpatch
-          zstd -d --long=31 --patch-from=remote_audio.b64 audio.zpatch -o fourth_audio.b64
-          echo 'b36539dff3ef1f0904f72c02070f6080458bc884a9742e5dd41d6a0bedfb3cd8  fourth_audio.b64' | sha256sum -c -
-          base64 -d fourth_audio.b64 > fourth_audio.ogg
-          echo '92a3847f3de2c5ed77e839bac3a08d6da5ab44c94761f7a15b5c82aa6cdb0396  fourth_audio.ogg' | sha256sum -c -
+          zstd -d --long=31 --patch-from=remote_audio.b64 audio.zpatch -o baseline_audio.b64
+          echo 'b36539dff3ef1f0904f72c02070f6080458bc884a9742e5dd41d6a0bedfb3cd8  baseline_audio.b64' | sha256sum -c -
+      - name: Apply real-audio correction patch
+        run: |
+          cat real_patch/p_00 real_patch/p_01 real_patch/p_02 real_patch/p_03 real_patch/p_04 > real_audio.zpatch.b64
+          echo 'c7546962d5c3b1f3edf6ff9779edaa217c54da67964712e86fabb2d7cd66df20  real_audio.zpatch.b64' | sha256sum -c -
+          base64 -d real_audio.zpatch.b64 > real_audio.zpatch
+          echo 'c9b4746bc83d9c9051e661ee42bb40312176ff2efbd53605262d07324f0363b9  real_audio.zpatch' | sha256sum -c -
+          zstd -d --long=31 --patch-from=baseline_audio.b64 real_audio.zpatch -o fourth_real_audio.b64
+          echo '174a52464bf2ebec7845a68127258e715c50b8f0726adc2d8913956bf24a922b  fourth_real_audio.b64' | sha256sum -c -
+          base64 -d fourth_real_audio.b64 > fourth_real_audio.ogg
+          echo 'cf121638a9bbbc0eb74566af3d5e8a8a181f7a6de5622cbdc2620af9f8584c9a  fourth_real_audio.ogg' | sha256sum -c -
       - name: Install Whisper
         run: |
           python -m pip install --upgrade pip
           pip install faster-whisper
-      - name: Transcribe without VAD
+      - name: Transcribe real original audio
         run: |
           cat > transcribe.py <<'PY'
           from faster_whisper import WhisperModel
           import json
           model = WhisperModel('large-v3-turbo', device='cpu', compute_type='int8')
           segments, info = model.transcribe(
-              'fourth_audio.ogg', language='zh', beam_size=5,
-              word_timestamps=True, vad_filter=False,
-              condition_on_previous_text=False,
+              'fourth_real_audio.ogg', language='zh', beam_size=5,
+              word_timestamps=True, vad_filter=True,
+              vad_parameters=dict(min_silence_duration_ms=350, speech_pad_ms=180),
+              condition_on_previous_text=True,
               temperature=0.0,
               initial_prompt='智慧体育体测分析与训练指导智能体，体测数据，可视化图表，知识库，Word报告导出。'
           )
@@ -44,16 +53,16 @@ jobs:
                   for w in s.words:
                       item['words'].append({'start':w.start,'end':w.end,'word':w.word,'probability':w.probability})
               out['segments'].append(item)
-          with open('fourth_transcript.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,indent=2)
-          with open('fourth_transcript.txt','w',encoding='utf-8') as f:
+          with open('fourth_real_transcript.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,indent=2)
+          with open('fourth_real_transcript.txt','w',encoding='utf-8') as f:
               for s in out['segments']: f.write(f"[{s['start']:.2f} --> {s['end']:.2f}] {s['text']}\n")
           PY
           python transcribe.py
-          cat fourth_transcript.txt
+          cat fourth_real_transcript.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: fourth-transcript-no-vad
+          name: fourth-real-transcript
           path: |
-            fourth_transcript.json
-            fourth_transcript.txt
-            fourth_audio.ogg
+            fourth_real_transcript.json
+            fourth_real_transcript.txt
+            fourth_real_audio.ogg
