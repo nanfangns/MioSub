@@ -1,0 +1,38 @@
+name: fourth-asr-temp
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  asr:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - run: |
+          curl -L --fail --retry 3 'https://drive.usercontent.google.com/download?id=1wCkRpxVpNpZDZBBJyU5H7S6ykN0TvQTk&export=download&confirm=t' -o fourth_micro.ogg
+          test $(stat -c%s fourth_micro.ogg) -gt 10000
+          pip install faster-whisper
+      - run: |
+          cat > /tmp/asr.py <<'PY'
+          from pathlib import Path
+          import json
+          from faster_whisper import WhisperModel
+          m=WhisperModel('small',device='cpu',compute_type='int8')
+          segs,info=m.transcribe('fourth_micro.ogg',language='zh',beam_size=5,vad_filter=True,word_timestamps=True,initial_prompt='智慧体育体测分析与训练指导智能体，体测，BMI，坐位体前屈，Word，DOCX，知识库，训练建议，体育中考')
+          out=[]
+          for s in segs: out.append({'start':round(s.start,3),'end':round(s.end,3),'text':s.text.strip(),'words':[{'start':round(w.start,3) if w.start is not None else None,'end':round(w.end,3) if w.end is not None else None,'word':w.word} for w in (s.words or [])]})
+          Path('fourth-transcript.json').write_text(json.dumps({'language':info.language,'duration':info.duration,'segments':out},ensure_ascii=False,indent=2),encoding='utf-8')
+          Path('fourth-transcript.txt').write_text('\n'.join(f"[{s['start']:.3f} --> {s['end']:.3f}] {s['text']}" for s in out),encoding='utf-8')
+          PY
+          python /tmp/asr.py
+      - run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add fourth-transcript.json fourth-transcript.txt
+          git commit -m 'Add fourth original-audio transcript'
+          git push
