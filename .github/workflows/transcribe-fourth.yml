@@ -11,13 +11,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Rebuild and verify byte-perfect original audio
+      - name: Assemble remote chunks
+        run: cat audio2/p_00 audio2/p_01 audio2/p_02 audio2/p_03 audio2/p_04 audio2/p_05 > remote_audio.b64
+      - name: Verify patch source
+        run: echo '6ffebd161ea5d87ad5b2cfb91bce29992cd2215e5e30898aa13cc8a28671e479  remote_audio.b64' | sha256sum -c -
+      - name: Decode correction patch
+        run: base64 -d audio2/audio.zpatch.b64 > audio.zpatch
+      - name: Apply correction patch
+        run: zstd -d --long=31 --patch-from=remote_audio.b64 audio.zpatch -o fourth_audio.b64
+      - name: Verify corrected base64
+        run: echo 'b36539dff3ef1f0904f72c02070f6080458bc884a9742e5dd41d6a0bedfb3cd8  fourth_audio.b64' | sha256sum -c -
+      - name: Decode and verify original audio
         run: |
-          cat audio2/p_00 audio2/p_01 audio2/p_02 audio2/p_03 audio2/p_04 audio2/p_05 > remote_audio.b64
-          echo '6ffebd161ea5d87ad5b2cfb91bce29992cd2215e5e30898aa13cc8a28671e479  remote_audio.b64' | sha256sum -c -
-          base64 -d audio2/audio.zpatch.b64 > audio.zpatch
-          zstd -d --long=31 --patch-from=remote_audio.b64 audio.zpatch -o fourth_audio.b64
-          echo 'b36539dff3ef1f0904f72c02070f6080458bc884a9742e5dd41d6a0bedfb3cd8  fourth_audio.b64' | sha256sum -c -
           base64 -d fourth_audio.b64 > fourth_audio.ogg
           echo '92a3847f3de2c5ed77e839bac3a08d6da5ab44c94761f7a15b5c82aa6cdb0396  fourth_audio.ogg' | sha256sum -c -
           ffprobe -v error -show_entries format=duration,bit_rate -of default=nw=1 fourth_audio.ogg
@@ -31,11 +36,7 @@ jobs:
           from faster_whisper import WhisperModel
           import json
           model = WhisperModel('large-v3-turbo', device='cpu', compute_type='int8')
-          segments, info = model.transcribe(
-              'fourth_audio.ogg', language='zh', beam_size=5,
-              word_timestamps=True, vad_filter=True,
-              condition_on_previous_text=True
-          )
+          segments, info = model.transcribe('fourth_audio.ogg', language='zh', beam_size=5, word_timestamps=True, vad_filter=True, condition_on_previous_text=True)
           out={'language': info.language, 'duration': info.duration, 'segments': []}
           for s in segments:
               item={'start':s.start,'end':s.end,'text':s.text.strip(),'words':[]}
@@ -43,11 +44,9 @@ jobs:
                   for w in s.words:
                       item['words'].append({'start':w.start,'end':w.end,'word':w.word,'probability':w.probability})
               out['segments'].append(item)
-          with open('fourth_transcript.json','w',encoding='utf-8') as f:
-              json.dump(out,f,ensure_ascii=False,indent=2)
+          with open('fourth_transcript.json','w',encoding='utf-8') as f: json.dump(out,f,ensure_ascii=False,indent=2)
           with open('fourth_transcript.txt','w',encoding='utf-8') as f:
-              for s in out['segments']:
-                  f.write(f"[{s['start']:.2f} --> {s['end']:.2f}] {s['text']}\n")
+              for s in out['segments']: f.write(f"[{s['start']:.2f} --> {s['end']:.2f}] {s['text']}\n")
           PY
           python transcribe.py
           cat fourth_transcript.txt
