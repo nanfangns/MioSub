@@ -21,11 +21,12 @@ jobs:
         run: zstd -d --long=31 --patch-from=remote_audio.b64 audio.zpatch -o fourth_audio.b64
       - name: Verify corrected base64
         run: echo 'b36539dff3ef1f0904f72c02070f6080458bc884a9742e5dd41d6a0bedfb3cd8  fourth_audio.b64' | sha256sum -c -
-      - name: Decode and verify original audio
-        run: |
-          base64 -d fourth_audio.b64 > fourth_audio.ogg
-          echo '92a3847f3de2c5ed77e839bac3a08d6da5ab44c94761f7a15b5c82aa6cdb0396  fourth_audio.ogg' | sha256sum -c -
-          ffprobe -v error -show_entries format=duration,bit_rate -of default=nw=1 fourth_audio.ogg
+      - name: Decode original audio
+        run: base64 -d fourth_audio.b64 > fourth_audio.ogg
+      - name: Verify original audio bytes
+        run: echo '92a3847f3de2c5ed77e839bac3a08d6da5ab44c94761f7a15b5c82aa6cdb0396  fourth_audio.ogg' | sha256sum -c -
+      - name: Probe original audio
+        run: ffprobe -v error -show_entries format=duration,bit_rate -of default=nw=1 fourth_audio.ogg
       - name: Install Whisper
         run: |
           python -m pip install --upgrade pip
