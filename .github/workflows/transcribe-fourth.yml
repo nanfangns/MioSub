@@ -1,0 +1,22 @@
+name: Fetch Vosk Chinese Model
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  fetch-model:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Vosk runtime and Chinese model
+        run: |
+          mkdir -p vosk_bundle
+          curl -L --fail --retry 3 -o vosk_bundle/vosk-0.3.45.whl 'https://files.pythonhosted.org/packages/fc/ca/83398cfcd557360a3d7b2d732aee1c5f6999f68618d1645f38d53e14c9ff/vosk-0.3.45-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl'
+          curl -L --fail --retry 3 -o vosk_bundle/vosk-model-small-cn-0.22.zip 'https://huggingface.co/rhasspy/vosk-models/resolve/main/zh/vosk-model-small-cn-0.22.zip?download=true'
+          echo '25e025093c4399d7278f543568ed8cc5460ac3a4bf48c23673ace1e25d26619f  vosk_bundle/vosk-0.3.45.whl' | sha256sum -c -
+          echo '3af8b0e7e0f835ae9d414ce5df580237a3cfb08d586c9fbbb0f7ff29ad5b14ba  vosk_bundle/vosk-model-small-cn-0.22.zip' | sha256sum -c -
+          ls -lh vosk_bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vosk-cn-bundle
+          path: vosk_bundle/
